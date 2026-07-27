@@ -130,27 +130,17 @@ class IDCMonitor:
     def get_hosts(self) -> list[dict]:
         """获取所有 VPS 主机列表"""
         data = self._request("GET", "/hosts", params={"page": 1, "limit": 100})
-        logger.info(f"DEBUG /hosts 原始响应: {json.dumps(data, ensure_ascii=False) if data else 'None'}")
         if data and isinstance(data, dict):
-            # 尝试多种可能的响应结构
-            hosts = data.get("data", [])
-            if isinstance(hosts, list):
-                return hosts
-            elif isinstance(hosts, dict):
-                # 有些接口返回 {"data": {"list": [...]}}
-                hosts = hosts.get("list", [])
-                if hosts:
-                    return hosts
-                # 也可能是 {"data": {"hosts": [...]}}
-                hosts = data["data"].get("hosts", [])
-                if hosts:
-                    return hosts
-            # 直接尝试顶层字段
-            for key in ("hosts", "list", "result", "servers"):
-                val = data.get(key)
-                if isinstance(val, list) and val:
-                    return val
-        logger.warning(f"无法解析主机列表，响应类型: {type(data)}, 键: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
+            inner = data.get("data", {})
+            if isinstance(inner, list):
+                return inner
+            if isinstance(inner, dict):
+                # 尝试多种可能的字段名: host / hosts / list / result
+                for key in ("host", "hosts", "list", "result", "servers"):
+                    hosts = inner.get(key)
+                    if isinstance(hosts, list) and hosts:
+                        return hosts
+        logger.warning(f"无法解析主机列表: {list(data.keys()) if isinstance(data, dict) else type(data)}")
         return []
 
     # --------------------------------------------------------
@@ -164,10 +154,13 @@ class IDCMonitor:
         data = self._request(
             "GET", f"/hosts/{host_id}/module/status", params={"type": "host"}
         )
+        logger.info(f"DEBUG 状态API响应 host_id={host_id}: {json.dumps(data, ensure_ascii=False) if data else 'None'}")
         if data and isinstance(data, dict):
             module_data = data.get("data", {})
             if isinstance(module_data, dict):
                 return str(module_data.get("status", "")).lower()
+            elif isinstance(module_data, str):
+                return module_data.lower()
         return "unknown"
 
     # --------------------------------------------------------
@@ -376,7 +369,7 @@ class IDCMonitor:
 
         for host in hosts:
             host_id = str(host.get("id", ""))
-            host_name = host.get("name", host.get("hostname", f"未知-{host_id}"))
+            host_name = host.get("name") or host.get("hostname") or host.get("domain") or f"未知-{host_id}"
             host_ip = host.get("ip", "")
 
             if not host_id:
