@@ -1,0 +1,27 @@
+name: Keepalive
+
+# 防止 GitHub 在仓库 60 天无活动后自动停用所有定时任务。
+# 每 15 天推送一次空提交，持续刷新活跃计时器。
+on:
+  schedule:
+    - cron: '0 0 1,15 * *'   # 每月 1 号、15 号（远小于 60 天）
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Push keepalive
+        run: |
+          date +%Y-%m-%dT%H:%M:%SZ > .last-active
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .last-active
+          git commit -m "chore: keepalive $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "nothing to commit"
+          git push

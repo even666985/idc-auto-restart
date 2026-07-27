@@ -1,0 +1,45 @@
+name: IDC Auto-Restart Monitor
+
+# 核云IDC 服务器自动监测重启
+# 每 5 分钟检测一次，发现离线自动开机并推送飞书交互式卡片通知。
+#
+# 必需 Secrets（Settings → Secrets and variables → Actions）：
+#   IDC_ACCOUNT      : 你的手机号或邮箱
+#   IDC_API_KEY      : 核云控制台「个人中心」生成的 API Key
+#   IDC_WEBHOOK      : 飞书机器人 webhook URL
+#
+# 可选 Secrets：
+#   IDC_CONSOLE_URL  : 核云控制台地址（卡片按钮跳转用）
+#   IDC_REPO_URL     : GitHub 仓库地址（卡片按钮跳转用）
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 每 5 分钟（GitHub Actions 最小间隔）
+  workflow_dispatch:        # 允许在 Actions 页面手动触发，方便测试
+
+permissions:
+  contents: read
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5      # 防止卡死，单轮检测应在 1 分钟内完成
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run monitor (one cycle)
+        env:
+          IDC_ACCOUNT: ${{ secrets.IDC_ACCOUNT }}
+          IDC_API_KEY: ${{ secrets.IDC_API_KEY }}
+          IDC_WEBHOOK: ${{ secrets.IDC_WEBHOOK }}
+          IDC_CONSOLE_URL: ${{ secrets.IDC_CONSOLE_URL }}
+          IDC_REPO_URL: ${{ secrets.IDC_REPO_URL }}
+        run: python idc_monitor.py --once

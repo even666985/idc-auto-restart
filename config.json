@@ -1,0 +1,11 @@
+{
+  "api_base_url": "https://www.heyunidc.cn/v1",
+  "api_account": "你的手机号或邮箱",
+  "api_password": "你的API Key（控制台生成）",
+  "check_interval": 300,
+  "daily_reboot_limit": 3,
+  "log_dir": "logs",
+  "webhook_url": "飞书机器人 webhook URL",
+  "idc_console_url": "https://www.heyunidc.cn/console/vps",
+  "repo_url": "https://github.com/你的用户名/仓库名"
+}
