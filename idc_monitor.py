@@ -170,10 +170,25 @@ class IDCMonitor:
         操作主机
         action: 'on' 开机 / 'reboot' 重启动 / 'hard_reboot' 硬重启 / 'off' 关机
         """
-        data = self._request(
-            "PUT", f"/hosts/{host_id}/module/hard_reboot",
-            json={"action": action}
-        )
+        # 不同操作走不同的接口
+        endpoint_map = {
+            "on": ("POST", f"/hosts/{host_id}/module/on"),
+            "off": ("POST", f"/hosts/{host_id}/module/off"),
+            "reboot": ("POST", f"/hosts/{host_id}/module/reboot"),
+            "hard_reboot": ("POST", f"/hosts/{host_id}/module/hard_reboot"),
+        }
+        method, path = endpoint_map.get(action, ("POST", f"/hosts/{host_id}/module/{action}"))
+
+        # 旧接口也试一下作为备选（PUT /module/hard_reboot + action body）
+        data = self._request(method, path)
+        logger.info(f"DEBUG operate {method} {path} → {json.dumps(data, ensure_ascii=False) if data else 'None'}")
+
+        if data is None:
+            # 新接口失败，回退到旧接口
+            logger.info(f"DEBUG 尝试旧接口 PUT /hosts/{host_id}/module/hard_reboot")
+            data = self._request("PUT", f"/hosts/{host_id}/module/hard_reboot", json={"action": action})
+            logger.info(f"DEBUG 旧接口 → {json.dumps(data, ensure_ascii=False) if data else 'None'}")
+
         if data:
             logger.info(f"操作成功: 主机 {host_id} → {action}")
             return True
