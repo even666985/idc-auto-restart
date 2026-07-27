@@ -168,30 +168,54 @@ class IDCMonitor:
     def operate_host(self, host_id: str, action: str = "on") -> bool:
         """
         操作主机
-        action: 'on' 开机 / 'reboot' 重启动 / 'hard_reboot' 硬重启 / 'off' 关机
+        核云只有一个操作入口: PUT /hosts/{id}/module/hard_reboot
+        需要通过返回的 api status 判断是否成功
         """
-        # 核云只有一个操作入口: PUT /hosts/{id}/module/hard_reboot
-        # 开机操作较慢（服务器启动中），设置较长超时
+        # 尝试多种请求 body，找到能用的
+        bodies_to_try = [
+            None,                          # 无 body，纯 hard_reboot
+            {"action": "hard_reboot"},     # 硬重启
+            {"action": "reboot"},          # 软重启
+            {"action": action},            # 原始 action（on/off 等）
+        ]
+        # 去重：None 和 dict 的去重
+        seen = set()
+        unique_bodies = []
+        for b in bodies_to_try:
+            key = json.dumps(b, sort_keys=True) if b is not None else "__none__"
+            if key not in seen:
+                seen.add(key)
+                unique_bodies.append(b)
+
         path = f"/hosts/{host_id}/module/hard_reboot"
-        try:
-            url = f"{self.base_url}{path}"
-            resp = requests.put(
-                url,
-                headers={"Authorization": f"JWT {self.jwt_token}"},
-                json={"action": action},
-                timeout=90,  # 开机可能需要较长时间
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            logger.info(f"操作成功: 主机 {host_id} → {action}, 响应: {json.dumps(data, ensure_ascii=False)}")
-            return True
-        except requests.exceptions.Timeout:
-            # 超时不代表失败 — 服务器可能在启动中，API 没返回但指令已下发
-            logger.warning(f"操作超时（可能已在执行中）: 主机 {host_id} → {action}")
-            return True
-        except Exception as e:
-            logger.error(f"操作失败: 主机 {host_id} → {action}, 错误: {e}")
-            return False
+        for body in unique_bodies:
+            try:
+                url = f"{self.base_url}{path}"
+                resp = requests.put(
+                    url,
+                    headers={"Authorization": f"JWT {self.jwt_token}"},
+                    json=body,
+                    timeout=90,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                api_status = data.get("status") if isinstance(data, dict) else None
+                api_msg = data.get("msg", "") if isinstance(data, dict) else ""
+                logger.info(f"DEBUG body={body} → api_status={api_status}, msg={api_msg}")
+
+                if api_status == 200:
+                    logger.info(f"✅ 操作成功: 主机 {host_id} → {action}")
+                    return True
+                # 继续试下一个 body
+            except requests.exceptions.Timeout:
+                logger.warning(f"操作超时 body={body}（可能已在执行中）")
+                continue
+            except Exception as e:
+                logger.warning(f"请求异常 body={body}: {e}")
+                continue
+
+        # 都失败了
+        return False
 
     # --------------------------------------------------------
     # 飞书交互式卡片通知
