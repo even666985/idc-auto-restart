@@ -154,7 +154,6 @@ class IDCMonitor:
         data = self._request(
             "GET", f"/hosts/{host_id}/module/status", params={"type": "host"}
         )
-        logger.info(f"DEBUG 状态API响应 host_id={host_id}: {json.dumps(data, ensure_ascii=False) if data else 'None'}")
         if data and isinstance(data, dict):
             module_data = data.get("data", {})
             if isinstance(module_data, dict):
