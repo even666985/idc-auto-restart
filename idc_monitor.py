@@ -170,31 +170,28 @@ class IDCMonitor:
         操作主机
         action: 'on' 开机 / 'reboot' 重启动 / 'hard_reboot' 硬重启 / 'off' 关机
         """
-        # 不同操作走不同的接口
-        endpoint_map = {
-            "on": ("POST", f"/hosts/{host_id}/module/on"),
-            "off": ("POST", f"/hosts/{host_id}/module/off"),
-            "reboot": ("POST", f"/hosts/{host_id}/module/reboot"),
-            "hard_reboot": ("POST", f"/hosts/{host_id}/module/hard_reboot"),
-        }
-        method, path = endpoint_map.get(action, ("POST", f"/hosts/{host_id}/module/{action}"))
+        # 试多种接口组合，找到能用的
+        candidates = [
+            # (method, path, body)
+            ("POST", f"/hosts/{host_id}/module/on", None),
+            ("POST", f"/hosts/{host_id}/on", None),
+            ("PUT",  f"/hosts/{host_id}/module/hard_reboot", {"action": action}),
+            ("POST", f"/hosts/{host_id}/module/hard_reboot", {"action": action}),
+            ("POST", f"/hosts/{host_id}/module/reboot", None),
+        ]
 
-        # 旧接口也试一下作为备选（PUT /module/hard_reboot + action body）
-        data = self._request(method, path)
-        logger.info(f"DEBUG operate {method} {path} → {json.dumps(data, ensure_ascii=False) if data else 'None'}")
+        for method, path, body in candidates:
+            data = self._request(method, path, json=body) if body else self._request(method, path)
+            api_status = data.get("status") if isinstance(data, dict) else None
+            logger.info(f"DEBUG {method} {path} body={body} → HTTP status={api_status}, msg={data.get('msg') if isinstance(data, dict) else 'N/A'}")
 
-        if data is None:
-            # 新接口失败，回退到旧接口
-            logger.info(f"DEBUG 尝试旧接口 PUT /hosts/{host_id}/module/hard_reboot")
-            data = self._request("PUT", f"/hosts/{host_id}/module/hard_reboot", json={"action": action})
-            logger.info(f"DEBUG 旧接口 → {json.dumps(data, ensure_ascii=False) if data else 'None'}")
+            # HTTP 200 且 API status 也是 200 才算成功
+            if data and isinstance(data, dict) and data.get("status") == 200:
+                logger.info(f"✅ 操作成功: {method} {path} 主机 {host_id} → {action}")
+                return True
 
-        if data:
-            logger.info(f"操作成功: 主机 {host_id} → {action}")
-            return True
-        else:
-            logger.warning(f"操作失败或无响应: 主机 {host_id} → {action}")
-            return False
+        logger.error(f"❌ 所有接口均失败: 主机 {host_id} → {action}")
+        return False
 
     # --------------------------------------------------------
     # 飞书交互式卡片通知
