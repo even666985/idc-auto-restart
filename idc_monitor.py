@@ -170,28 +170,28 @@ class IDCMonitor:
         操作主机
         action: 'on' 开机 / 'reboot' 重启动 / 'hard_reboot' 硬重启 / 'off' 关机
         """
-        # 试多种接口组合，找到能用的
-        candidates = [
-            # (method, path, body)
-            ("POST", f"/hosts/{host_id}/module/on", None),
-            ("POST", f"/hosts/{host_id}/on", None),
-            ("PUT",  f"/hosts/{host_id}/module/hard_reboot", {"action": action}),
-            ("POST", f"/hosts/{host_id}/module/hard_reboot", {"action": action}),
-            ("POST", f"/hosts/{host_id}/module/reboot", None),
-        ]
-
-        for method, path, body in candidates:
-            data = self._request(method, path, json=body) if body else self._request(method, path)
-            api_status = data.get("status") if isinstance(data, dict) else None
-            logger.info(f"DEBUG {method} {path} body={body} → HTTP status={api_status}, msg={data.get('msg') if isinstance(data, dict) else 'N/A'}")
-
-            # HTTP 200 且 API status 也是 200 才算成功
-            if data and isinstance(data, dict) and data.get("status") == 200:
-                logger.info(f"✅ 操作成功: {method} {path} 主机 {host_id} → {action}")
-                return True
-
-        logger.error(f"❌ 所有接口均失败: 主机 {host_id} → {action}")
-        return False
+        # 核云只有一个操作入口: PUT /hosts/{id}/module/hard_reboot
+        # 开机操作较慢（服务器启动中），设置较长超时
+        path = f"/hosts/{host_id}/module/hard_reboot"
+        try:
+            url = f"{self.base_url}{path}"
+            resp = requests.put(
+                url,
+                headers={"Authorization": f"JWT {self.jwt_token}"},
+                json={"action": action},
+                timeout=90,  # 开机可能需要较长时间
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info(f"操作成功: 主机 {host_id} → {action}, 响应: {json.dumps(data, ensure_ascii=False)}")
+            return True
+        except requests.exceptions.Timeout:
+            # 超时不代表失败 — 服务器可能在启动中，API 没返回但指令已下发
+            logger.warning(f"操作超时（可能已在执行中）: 主机 {host_id} → {action}")
+            return True
+        except Exception as e:
+            logger.error(f"操作失败: 主机 {host_id} → {action}, 错误: {e}")
+            return False
 
     # --------------------------------------------------------
     # 飞书交互式卡片通知
