@@ -130,13 +130,27 @@ class IDCMonitor:
     def get_hosts(self) -> list[dict]:
         """获取所有 VPS 主机列表"""
         data = self._request("GET", "/hosts", params={"page": 1, "limit": 100})
+        logger.info(f"DEBUG /hosts 原始响应: {json.dumps(data, ensure_ascii=False) if data else 'None'}")
         if data and isinstance(data, dict):
+            # 尝试多种可能的响应结构
             hosts = data.get("data", [])
             if isinstance(hosts, list):
                 return hosts
             elif isinstance(hosts, dict):
-                # 有些接口返回 {"data": [...]} 嵌套
-                return hosts.get("list", [])
+                # 有些接口返回 {"data": {"list": [...]}}
+                hosts = hosts.get("list", [])
+                if hosts:
+                    return hosts
+                # 也可能是 {"data": {"hosts": [...]}}
+                hosts = data["data"].get("hosts", [])
+                if hosts:
+                    return hosts
+            # 直接尝试顶层字段
+            for key in ("hosts", "list", "result", "servers"):
+                val = data.get(key)
+                if isinstance(val, list) and val:
+                    return val
+        logger.warning(f"无法解析主机列表，响应类型: {type(data)}, 键: {list(data.keys()) if isinstance(data, dict) else 'N/A'}")
         return []
 
     # --------------------------------------------------------
