@@ -90,8 +90,10 @@ class IDCMonitor:
             resp = requests.post(url, params=params, timeout=30)
             resp.raise_for_status()
             data = resp.json()
-            if data.get("token"):
-                self.jwt_token = data["token"]
+            # API 返回的 token 字段可能是 "token" 或 "jwt"
+            token = data.get("token") or data.get("jwt")
+            if token:
+                self.jwt_token = token
                 logger.info("登录成功，Token 已获取")
                 return True
             else:
