@@ -12,6 +12,8 @@ name: IDC Auto-Restart Monitor
 #   IDC_CONSOLE_URL  : 核云控制台地址（卡片按钮跳转用）
 #   IDC_REPO_URL     : GitHub 仓库地址（卡片按钮跳转用）
 on:
+  push:                     # 每次 push 自动触发（首次运行后 workflow_dispatch 按钮即出现）
+    branches: [master]
   schedule:
     - cron: '*/5 * * * *'   # 每 5 分钟（GitHub Actions 最小间隔）
   workflow_dispatch:        # 允许在 Actions 页面手动触发，方便测试
